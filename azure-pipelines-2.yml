@@ -1,0 +1,57 @@
+trigger:
+- main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  buildConfiguration: 'Release'
+  webAppName: 'your-static-web-app-name' # Replace with your Azure Web App name
+
+steps:
+# Install Node.js (Optional if you have any build steps that require Node.js)
+- task: NodeTool@0
+  inputs:
+    versionSpec: '14.x'
+
+# Archive the static HTML files
+- task: ArchiveFiles@2
+  inputs:
+    rootFolderOrFile: '$(Build.SourcesDirectory)' # The directory containing your static files
+    includeRootFolder: false
+    archiveType: 'zip'
+    archiveFile: '$(Build.ArtifactStagingDirectory)/static-html.zip'
+    replaceExistingArchive: true
+
+# Publish the archived files as a build artifact
+- task: PublishBuildArtifacts@1
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)/static-html.zip'
+    ArtifactName: 'drop'
+    publishLocation: 'Container'
+
+# Deploy to Azure Web App (Optional, if deploying to Azure Web App)
+- task: AzureWebApp@1
+  inputs:
+    azureSubscription: 'your-azure-subscription-id' # Replace with your Azure subscription ID
+    appName: $(webAppName)
+    package: '$(Build.ArtifactStagingDirectory)/static-html.zip'
+
+# Deploy to Azure Storage (Optional, if deploying to Azure Storage)
+- task: AzureFileCopy@4
+  inputs:
+    SourcePath: '$(Build.ArtifactStagingDirectory)/static-html.zip'
+    azureSubscription: 'your-azure-subscription-id' # Replace with your Azure subscription ID
+    Destination: 'AzureBlob'
+    storage: 'your-storage-account-name' # Replace with your Azure Storage account name
+    ContainerName: '$web' # Container for static websites in Azure Storage
+    BlobPrefix: '' # Optional, specify a prefix if needed
+    AdditionalArguments: '--overwrite'
+
+# Optional: Unzip the files in the destination (if deploying to Azure Storage)
+- script: |
+    az storage blob delete-batch --account-name your-storage-account-name --source '$web'
+    az storage blob upload-batch --account-name your-storage-account-name --destination '$web' --source '$(Build.SourcesDirectory)' --pattern '*.*'
+  displayName: 'Upload files to Azure Storage'
+  env:
+    AZURE_STORAGE_KEY: $(azureStorageKey) # Add the Azure Storage key as a pipeline secret
